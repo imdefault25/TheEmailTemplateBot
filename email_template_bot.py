@@ -23,17 +23,11 @@ from telegram.request import HTTPXRequest
 # =========================
 #  CONFIG
 # =========================
-<<<<<<< HEAD
-# ⚠️ Revoke old token in BotFather and paste the new one here,
-# or set an env var TELEGRAM_BOT_TOKEN and leave the default.
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8318815644:AAF0IZQDo6tWT6MhOA8WxPmmYoOyZRnDTKE")
-=======
 # Token must be provided via environment variable TELEGRAM_BOT_TOKEN
 BOT_TOKEN = os.getenv("8318815644:AAF0IZQDo6tWT6MhOA8WxPmmYoOyZRnDTKE")
 if not BOT_TOKEN:
     raise SystemExit("ERROR: TELEGRAM_BOT_TOKEN environment variable not set")
 
->>>>>>> 354c470955d1fafeed5a5cfa9a38b71638a7608e
 TEMPLATES_FILE = "templates_store.json"
 USER_SETTINGS_FILE = "user_settings.json"   # per-user saved names, counters, auth
 ACCESS_PASSWORD = "2468"
