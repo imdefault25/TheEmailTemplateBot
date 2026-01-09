@@ -1,4 +1,8 @@
-import os, json, datetime, contextlib, html
+import os
+import json
+import datetime
+import contextlib
+import html
 from typing import Dict, Any, List
 
 from jinja2 import Template
@@ -29,7 +33,7 @@ if not BOT_TOKEN:
     raise SystemExit("ERROR: TELEGRAM_BOT_TOKEN environment variable not set")
 
 TEMPLATES_FILE = "templates_store.json"
-USER_SETTINGS_FILE = "user_settings.json"   # per-user saved names, counters, auth
+USER_SETTINGS_FILE = "user_settings.json"  # per-user saved names, counters, auth
 ACCESS_PASSWORD = "2468"
 
 # Map internal template keys -> display labels
@@ -90,6 +94,7 @@ def get_generated(user_id: int) -> int:
 # =========================
 if not os.path.exists(TEMPLATES_FILE):
     raise SystemExit(f"ERROR: '{TEMPLATES_FILE}' not found in the folder.")
+
 with open(TEMPLATES_FILE, "r", encoding="utf-8") as f:
     templates = json.load(f)
 
@@ -109,7 +114,6 @@ def esc(s: Any) -> str:
 #  UI / TEXT HELPERS (HTML)
 # =========================
 def how_to_html() -> str:
-    # Shown only AFTER successful password; includes requested emojis.
     return (
         "<b>How to use</b>\n"
         "———————————————\n"
@@ -118,9 +122,7 @@ def how_to_html() -> str:
         "3️⃣ Pick the Representative / Support specialist from your saved names or choose <b>Custom…</b>\n"
         "4️⃣ Review the summary and tap <b>Yes</b> to confirm (or <b>No</b> to edit a specific field)\n"
         "5️⃣ You’ll receive the completed <b>.html</b> file\n"
-        "6️⃣ Use <b>⚙️ Settings</b> to add/remove your representative names anytime\n\n"
-        "👨‍💻 <b>Admin Support:</b> @Infinityadmin_00\n"
-        "📢 <b>Channel:</b> @infinitysmshq"
+        "6️⃣ Use <b>⚙️ Settings</b> to add/remove your representative names anytime\n"
     )
 
 def dashboard_html(first_name: str, user_id: int) -> str:
@@ -132,13 +134,10 @@ def dashboard_html(first_name: str, user_id: int) -> str:
     )
 
 def gate_html() -> str:
-    # BEFORE password: ONLY the lock prompt + your two lines with emojis.
     return (
         "<b>This bot is locked.</b>\n"
         "Please enter the access password to continue.\n\n"
-        "Type the password:\n\n"
-        "👨‍💻 <b>Admin Support:</b> @Infinityadmin_00\n"
-        "📢 <b>Channel:</b> @infinitysmshq"
+        "Type the password:"
     )
 
 def main_menu_kb() -> InlineKeyboardMarkup:
@@ -161,10 +160,10 @@ def yes_no_kb() -> InlineKeyboardMarkup:
          InlineKeyboardButton("❌ No", callback_data="conf:no")]
     ])
 
-def reps_kb(user_id: int, include_custom=True) -> InlineKeyboardMarkup:
+def reps_kb(user_id: int, include_custom: bool = True) -> InlineKeyboardMarkup:
     names = get_rep_names(user_id)
     buttons = [InlineKeyboardButton(n, callback_data=f"rep:{n}") for n in names]
-    rows = []
+    rows: List[List[InlineKeyboardButton]] = []
     for i in range(0, len(buttons), 2):
         rows.append(buttons[i:i+2])
     if include_custom or not rows:
@@ -173,7 +172,7 @@ def reps_kb(user_id: int, include_custom=True) -> InlineKeyboardMarkup:
 
 def settings_kb(user_id: int) -> InlineKeyboardMarkup:
     names = get_rep_names(user_id)
-    rows = []
+    rows: List[List[InlineKeyboardButton]] = []
     if names:
         for i, n in enumerate(names):
             rows.append([InlineKeyboardButton(f"❌ Remove: {n}", callback_data=f"settings:del:{i}")])
@@ -195,7 +194,6 @@ def ensure_auth_session(chat_id: int) -> None:
         s["mode"] = None
 
 async def require_auth_or_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """If not authorized, show password prompt and return False; else True."""
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     if is_authorized(user_id):
@@ -207,7 +205,7 @@ async def require_auth_or_prompt(update: Update, context: ContextTypes.DEFAULT_T
             await update.callback_query.edit_message_text(
                 gate_html(),
                 disable_web_page_preview=True,
-                parse_mode=ParseMode.HTML
+                parse_mode=ParseMode.HTML,
             )
     else:
         await update.message.reply_text(gate_html(), disable_web_page_preview=True, parse_mode=ParseMode.HTML)
@@ -217,7 +215,6 @@ async def require_auth_or_prompt(update: Update, context: ContextTypes.DEFAULT_T
 #  COMMANDS
 # =========================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Always prompt for password if not authorized; else show dashboard."""
     user_id = update.effective_user.id
     first = update.effective_user.first_name or "there"
 
@@ -242,19 +239,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 #  CALLBACKS (inline buttons)
 # =========================
 async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """No callback actions are allowed unless authorized."""
     q = update.callback_query
     await q.answer()
     chat_id = q.message.chat.id
     user_id = q.from_user.id
     data = q.data
 
-    # Strict gate: block EVERYTHING when not authorized
     if not is_authorized(user_id):
         await require_auth_or_prompt(update, context)
         return
 
-    # Dashboard nav (authorized-only)
     if data in ("menu:home", "menu:back"):
         first = q.from_user.first_name or "there"
         with contextlib.suppress(BadRequest):
@@ -262,33 +256,42 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 dashboard_html(first, user_id),
                 reply_markup=main_menu_kb(),
                 parse_mode=ParseMode.HTML,
-                disable_web_page_preview=True
+                disable_web_page_preview=True,
             )
         return
+
     if data == "menu:create":
         with contextlib.suppress(BadRequest):
             await q.edit_message_text("Pick a template:", reply_markup=templates_kb())
         return
+
     if data == "menu:settings":
         first = q.from_user.first_name or ""
         head = f"Settings • Manage your representative names, {esc(first)}."
         with contextlib.suppress(BadRequest):
-            await q.edit_message_text(head + "\nTap a row to remove, or add a new one.",
-                                      reply_markup=settings_kb(user_id),
-                                      parse_mode=ParseMode.HTML)
-        return
-    if data == "menu:help":
-        with contextlib.suppress(BadRequest):
-            await q.edit_message_text(how_to_html(), parse_mode=ParseMode.HTML, disable_web_page_preview=True,
-                                      reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="menu:back")]]))
+            await q.edit_message_text(
+                head + "\nTap a row to remove, or add a new one.",
+                reply_markup=settings_kb(user_id),
+                parse_mode=ParseMode.HTML,
+            )
         return
 
-    # Settings actions
+    if data == "menu:help":
+        with contextlib.suppress(BadRequest):
+            await q.edit_message_text(
+                how_to_html(),
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True,
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="menu:back")]]),
+            )
+        return
+
     if data == "settings:add":
         sessions[chat_id] = {"mode": "await_add_name"}
         with contextlib.suppress(BadRequest):
             await q.edit_message_text("Type the representative name to add (or /cancel):")
         return
+
     if data.startswith("settings:del:"):
         idx = int(data.split(":")[-1])
         names = get_rep_names(user_id)
@@ -296,11 +299,9 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             names.pop(idx)
             set_rep_names(user_id, names)
         with contextlib.suppress(BadRequest):
-            await q.edit_message_text("Updated.\n\nSettings • Manage your representative names.",
-                                      reply_markup=settings_kb(user_id))
+            await q.edit_message_text("Updated.\n\nSettings • Manage your representative names.", reply_markup=settings_kb(user_id))
         return
 
-    # Template choose (data contains the internal key)
     if data.startswith("tpl:"):
         tpl_key = data.split(":", 1)[1]
         tpl = templates[tpl_key]
@@ -309,12 +310,11 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "fields_order": tpl.get("fields_order", []),
             "values": {},
             "idx": 0,
-            "stage": "collect",  # collect | confirm | edit_select
+            "stage": "collect",
         }
         await ask_next(update, context, edit=True)
         return
 
-    # Rep selection
     if data.startswith("rep:"):
         s = sessions.get(chat_id)
         if not s:
@@ -331,11 +331,11 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await ask_next(update, context, edit=True)
         return
 
-    # Confirmation
     if data == "conf:yes":
         await render_and_send(update, context)
         sessions.pop(chat_id, None)
         return
+
     if data == "conf:no":
         s = sessions.get(chat_id)
         if not s:
@@ -345,7 +345,6 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await q.edit_message_text("Select a field to edit:", reply_markup=field_choices_kb(s["fields_order"]))
         return
 
-    # Edit which field
     if data.startswith("edit:"):
         choice = data.split(":", 1)[1]
         s = sessions.get(chat_id)
@@ -367,36 +366,30 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = (update.message.text or "").strip()
 
-    # STRICT PASSWORD GATE
     s = sessions.get(chat_id)
+
     if not is_authorized(user_id):
-        # We are not authorized yet.
-        # If we're not already awaiting the password, prompt for it.
         if not (s and s.get("mode") == "await_password"):
             ensure_auth_session(chat_id)
             sessions[chat_id]["mode"] = "await_password"
             await update.message.reply_text(gate_html(), disable_web_page_preview=True, parse_mode=ParseMode.HTML)
             return
 
-        # We ARE awaiting the password → check it
         if text == ACCESS_PASSWORD:
             set_authorized(user_id, True)
             sessions.pop(chat_id, None)
-            # Immediately show dashboard (no extra click)
             first = update.effective_user.first_name or "there"
             await update.message.reply_text(
                 dashboard_html(first, user_id),
                 reply_markup=main_menu_kb(),
                 parse_mode=ParseMode.HTML,
-                disable_web_page_preview=True
+                disable_web_page_preview=True,
             )
             return
-        else:
-            await update.message.reply_text("Incorrect password ❌. Try again:")
-            return
 
-    # Authorized flow below
-    # /cancel
+        await update.message.reply_text("Incorrect password ❌. Try again:")
+        return
+
     if text.lower() == "/cancel":
         with contextlib.suppress(KeyError):
             sessions.pop(chat_id)
@@ -405,7 +398,6 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                         parse_mode=ParseMode.HTML, disable_web_page_preview=True)
         return
 
-    # settings add-name mode
     if s and s.get("mode") == "await_add_name":
         name = text
         names = get_rep_names(user_id)
@@ -413,11 +405,9 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             names.append(name)
             set_rep_names(user_id, names)
         sessions.pop(chat_id, None)
-        await update.message.reply_text("Saved ✅\n\nSettings • Manage your representative names.",
-                                        reply_markup=settings_kb(user_id))
+        await update.message.reply_text("Saved ✅\n\nSettings • Manage your representative names.", reply_markup=settings_kb(user_id))
         return
 
-    # template run
     if s and s.get("stage") in ("collect", "edit_select"):
         labels = s["fields_order"]
 
@@ -437,7 +427,6 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await ask_next(update, context)
             return
 
-    # otherwise show dashboard
     await start(update, context)
 
 # =========================
@@ -462,14 +451,14 @@ async def ask_next(update: Update, context: ContextTypes.DEFAULT_TYPE, edit: boo
             else:
                 await update.message.reply_text(txt, reply_markup=kb, parse_mode=ParseMode.HTML)
             return
+
+        txt = f"Enter value for '{esc(label)}':"
+        if edit and update.callback_query:
+            with contextlib.suppress(BadRequest):
+                await update.callback_query.edit_message_text(txt, parse_mode=ParseMode.HTML)
         else:
-            txt = f"Enter value for '{esc(label)}':"
-            if edit and update.callback_query:
-                with contextlib.suppress(BadRequest):
-                    await update.callback_query.edit_message_text(txt, parse_mode=ParseMode.HTML)
-            else:
-                await update.message.reply_text(txt, parse_mode=ParseMode.HTML)
-            return
+            await update.message.reply_text(txt, parse_mode=ParseMode.HTML)
+        return
 
     await show_confirmation(update, context, edit=edit)
 
@@ -493,10 +482,10 @@ async def render_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
     s = sessions.get(chat_id)
     if not s:
         return
+
     tpl = templates[s["tpl_key"]]
     ctx = dict(s["values"])
 
-    # auto fields (dates, etc.)
     auto = tpl.get("auto_fields") or {}
     for k, v in auto.items():
         if v == "DATE":
@@ -506,6 +495,7 @@ async def render_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     html_out = Template(tpl["template"]).render(**ctx)
     filename = f"{s['tpl_key'].replace(' ', '_')}.html"
+
     with open(filename, "w", encoding="utf-8") as f:
         f.write(html_out)
 
@@ -516,7 +506,7 @@ async def render_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(
         chat_id=chat_id,
         text=f"Done ✅\nGenerated this session. Total generated: {total}",
-        reply_markup=return_to_dashboard_kb()
+        reply_markup=return_to_dashboard_kb(),
     )
 
 # =========================
@@ -533,10 +523,9 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 #  BOOT
 # =========================
 def main():
-    # Add timeouts to reduce ReadTimeout noise
     request = HTTPXRequest(read_timeout=20.0, connect_timeout=20.0)
-
     app = ApplicationBuilder().token(BOT_TOKEN).request(request).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(on_cb))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), on_text))
