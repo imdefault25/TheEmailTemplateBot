@@ -19,3 +19,18 @@
 >>>>>>> 354c470955d1fafeed5a5cfa9a38b71638a7608e
   }
 }
+"Ledger Live (Private)": {
+  "fields_order": [
+    "Address Line 1",
+    "Address Line 2",
+    "Address Line 3",
+    "Country",
+    "Recipient Name",
+    "Date",
+    "Reference",
+    "Reference In Letter",
+    "Link",
+    "Output Type"
+  ],
+  "template": "<!doctype html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n  <title>Private Letter</title>\n</head>\n<body style=\"margin:0; padding:0; background:#f5f5f5; font-family:Arial,Helvetica,sans-serif;\">\n  <table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\" style=\"background:#f5f5f5;\">\n    <tr>\n      <td align=\"center\" style=\"padding:24px;\">\n        <table role=\"presentation\" width=\"700\" cellspacing=\"0\" cellpadding=\"0\" border=\"0\" style=\"width:100%; max-width:700px; background:#ffffff; border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,0.06);\">\n          <tr>\n            <td style=\"padding:28px;\">\n\n              <div style=\"font-size:14px; line-height:1.6; color:#111;\">\n                <div>{{ Address_Line_1 }}</div>\n                <div>{{ Address_Line_2 }}</div>\n                <div>{{ Address_Line_3 }}</div>\n                <div>{{ Country }}</div>\n              </div>\n\n              <div style=\"height:18px;\"></div>\n\n              <div style=\"font-size:14px; line-height:1.6; color:#111;\">\n                <div><strong>Date:</strong> {{ Date }}</div>\n                <div><strong>Reference:</strong> {{ Reference }}</div>\n              </div>\n\n              <div style=\"height:18px;\"></div>\n\n              <div style=\"font-size:14px; line-height:1.6; color:#111;\">\n                <div>Dear,</div>\n                <div style=\"margin-top:6px;\"><strong>{{ Recipient_Name }}</strong></div>\n              </div>\n\n              <div style=\"height:18px;\"></div>\n\n              <div style=\"font-size:14px; line-height:1.8; color:#111;\">\n                <p style=\"margin:0 0 10px 0;\">Your reference number is <strong>{{ Reference_In_Letter }}</strong>.</p>\n                <p style=\"margin:0;\">Otherwise visit: <strong>{{ Link }}</strong></p>\n              </div>\n\n              <div style=\"height:22px;\"></div>\n\n              <div style=\"font-size:14px; line-height:1.6; color:#111;\">\n                <div>Sincerely,</div>\n                <div style=\"margin-top:6px;\">Support Team</div>\n              </div>\n\n              <div style=\"margin-top:22px; border-top:1px solid #e5e7eb;\"></div>\n\n              <div style=\"margin-top:14px; font-size:12px; color:#6b7280; line-height:1.6;\">\n                <strong>Output Type:</strong> {{ Output_Type }}\n              </div>\n\n            </td>\n          </tr>\n        </table>\n      </td>\n    </tr>\n  </table>\n</body>\n</html>\n"
+}
