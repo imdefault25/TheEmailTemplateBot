@@ -27,7 +27,8 @@ from telegram.request import HTTPXRequest
 # =========================
 #  CONFIG
 # =========================
-# Token must be provided via environment variable TELEGRAM_BOT_TOKEN
+# MUST be set as an environment variable in Railway:
+# TELEGRAM_BOT_TOKEN = 123456:AA....
 BOT_TOKEN = os.getenv("8318815644:AAF0IZQDo6tWT6MhOA8WxPmmYoOyZRnDTKE")
 if not BOT_TOKEN:
     raise SystemExit("ERROR: TELEGRAM_BOT_TOKEN environment variable not set")
@@ -36,10 +37,15 @@ TEMPLATES_FILE = "templates_store.json"
 USER_SETTINGS_FILE = "user_settings.json"  # per-user saved names, counters, auth
 ACCESS_PASSWORD = "2468"
 
+# extra gate for the Ledger Live (Private) template
+LEDGER_PRIVATE_CODE = "1083"
+LEDGER_PRIVATE_KEY = "Ledger Live (Private)"
+
 # Map internal template keys -> display labels
 DISPLAY_LABELS = {
     "Binance": "Binance",
-    "Newcastle AUS": "Newcastle 🇦🇺",  # show flag, hide "AUS"
+    "Newcastle AUS": "Newcastle 🇦🇺",
+    "Ledger Live (Private)": "Ledger Live (Private)",
 }
 REVERSE_LABELS = {v: k for k, v in DISPLAY_LABELS.items()}
 
@@ -61,7 +67,7 @@ def save_user_settings(data: Dict[str, Any]) -> None:
         json.dump(data, f, ensure_ascii=False, indent=2)
     os.replace(tmp, USER_SETTINGS_FILE)
 
-user_settings = load_user_settings()  # { user_id: { "rep_names": [...], "generated_count": int, "authorized": bool } }
+user_settings = load_user_settings()
 
 def get_entry(user_id: int) -> Dict[str, Any]:
     return user_settings.setdefault(str(user_id), {})
@@ -71,6 +77,13 @@ def is_authorized(user_id: int) -> bool:
 
 def set_authorized(user_id: int, value: bool) -> None:
     get_entry(user_id)["authorized"] = bool(value)
+    save_user_settings(user_settings)
+
+def is_ledger_unlocked(user_id: int) -> bool:
+    return bool(get_entry(user_id).get("ledger_private_unlocked", False))
+
+def set_ledger_unlocked(user_id: int, value: bool) -> None:
+    get_entry(user_id)["ledger_private_unlocked"] = bool(value)
     save_user_settings(user_settings)
 
 def get_rep_names(user_id: int) -> List[str]:
@@ -107,7 +120,6 @@ def norm(label: str) -> str:
     return label.strip().replace(" ", "_")
 
 def esc(s: Any) -> str:
-    """Escape for HTML parse_mode."""
     return html.escape(str(s), quote=True)
 
 # =========================
@@ -118,9 +130,9 @@ def how_to_html() -> str:
         "<b>How to use</b>\n"
         "———————————————\n"
         "1️⃣ Select a template from <b>🗂️ Choose Template</b>\n"
-        "2️⃣ Fill in the required fields (e.g., Case ID, Client Name)\n"
+        "2️⃣ Fill in the required fields\n"
         "3️⃣ Pick the Representative / Support specialist from your saved names or choose <b>Custom…</b>\n"
-        "4️⃣ Review the summary and tap <b>Yes</b> to confirm (or <b>No</b> to edit a specific field)\n"
+        "4️⃣ Review the summary and tap <b>Yes</b> to confirm (or <b>No</b> to edit)\n"
         "5️⃣ You’ll receive the completed <b>.html</b> file\n"
         "6️⃣ Use <b>⚙️ Settings</b> to add/remove your representative names anytime\n"
     )
@@ -140,6 +152,13 @@ def gate_html() -> str:
         "Type the password:"
     )
 
+def ledger_gate_html() -> str:
+    return (
+        "<b>Locked template</b>\n"
+        "This template requires an extra access code.\n\n"
+        "Type the code:"
+    )
+
 def main_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🗂️ Choose Template", callback_data="menu:create")],
@@ -151,8 +170,14 @@ def return_to_dashboard_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Return to Dashboard", callback_data="menu:home")]])
 
 def templates_kb() -> InlineKeyboardMarkup:
-    row = [InlineKeyboardButton(DISPLAY_LABELS.get(k, k), callback_data=f"tpl:{k}") for k in templates.keys()]
-    return InlineKeyboardMarkup([row, [InlineKeyboardButton("⬅️ Back", callback_data="menu:back")]])
+    # split into rows of 2 so it doesn’t overflow
+    keys = list(templates.keys())
+    buttons = [InlineKeyboardButton(DISPLAY_LABELS.get(k, k), callback_data=f"tpl:{k}") for k in keys]
+    rows: List[List[InlineKeyboardButton]] = []
+    for i in range(0, len(buttons), 2):
+        rows.append(buttons[i:i+2])
+    rows.append([InlineKeyboardButton("⬅️ Back", callback_data="menu:back")])
+    return InlineKeyboardMarkup(rows)
 
 def yes_no_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
@@ -225,15 +250,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(gate_html(), disable_web_page_preview=True, parse_mode=ParseMode.HTML)
         else:
             with contextlib.suppress(BadRequest):
-                await update.callback_query.edit_message_text(gate_html(), disable_web_page_preview=True, parse_mode=ParseMode.HTML)
+                await update.callback_query.edit_message_text(
+                    gate_html(),
+                    disable_web_page_preview=True,
+                    parse_mode=ParseMode.HTML
+                )
         return
 
     text = dashboard_html(first, user_id)
     if update.message:
-        await update.message.reply_text(text, reply_markup=main_menu_kb(), parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+        await update.message.reply_text(
+            text,
+            reply_markup=main_menu_kb(),
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True
+        )
     else:
         with contextlib.suppress(BadRequest):
-            await update.callback_query.edit_message_text(text, reply_markup=main_menu_kb(), parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+            await update.callback_query.edit_message_text(
+                text,
+                reply_markup=main_menu_kb(),
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True
+            )
 
 # =========================
 #  CALLBACKS (inline buttons)
@@ -299,22 +338,30 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
             names.pop(idx)
             set_rep_names(user_id, names)
         with contextlib.suppress(BadRequest):
-            await q.edit_message_text("Updated.\n\nSettings • Manage your representative names.", reply_markup=settings_kb(user_id))
+            await q.edit_message_text(
+                "Updated.\n\nSettings • Manage your representative names.",
+                reply_markup=settings_kb(user_id)
+            )
         return
 
+    # Template selection
     if data.startswith("tpl:"):
         tpl_key = data.split(":", 1)[1]
-        tpl = templates[tpl_key]
-        sessions[chat_id] = {
-            "tpl_key": tpl_key,
-            "fields_order": tpl.get("fields_order", []),
-            "values": {},
-            "idx": 0,
-            "stage": "collect",
-        }
-        await ask_next(update, context, edit=True)
+
+        # extra gate for Ledger Live (Private)
+        if tpl_key == LEDGER_PRIVATE_KEY and not is_ledger_unlocked(user_id):
+            sessions[chat_id] = {
+                "mode": "await_ledger_code",
+                "pending_tpl_key": tpl_key,
+            }
+            with contextlib.suppress(BadRequest):
+                await q.edit_message_text(ledger_gate_html(), parse_mode=ParseMode.HTML)
+            return
+
+        await start_template_session(chat_id, tpl_key, update, context, edit=True)
         return
 
+    # Rep selection
     if data.startswith("rep:"):
         s = sessions.get(chat_id)
         if not s:
@@ -331,6 +378,7 @@ async def on_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await ask_next(update, context, edit=True)
         return
 
+    # Confirmation
     if data == "conf:yes":
         await render_and_send(update, context)
         sessions.pop(chat_id, None)
@@ -365,9 +413,9 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
     text = (update.message.text or "").strip()
-
     s = sessions.get(chat_id)
 
+    # Global lock
     if not is_authorized(user_id):
         if not (s and s.get("mode") == "await_password"):
             ensure_auth_session(chat_id)
@@ -390,14 +438,33 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Incorrect password ❌. Try again:")
         return
 
+    # Ledger private code gate
+    if s and s.get("mode") == "await_ledger_code":
+        if text == LEDGER_PRIVATE_CODE:
+            set_ledger_unlocked(user_id, True)
+            pending = s.get("pending_tpl_key", LEDGER_PRIVATE_KEY)
+            # start the template immediately
+            sessions.pop(chat_id, None)
+            await update.message.reply_text("Unlocked ✅")
+            await start_template_session(chat_id, pending, update, context, edit=False)
+        else:
+            await update.message.reply_text("Incorrect code ❌. Try again:")
+        return
+
+    # /cancel
     if text.lower() == "/cancel":
         with contextlib.suppress(KeyError):
             sessions.pop(chat_id)
         first = update.effective_user.first_name or "there"
-        await update.message.reply_text(dashboard_html(first, user_id), reply_markup=main_menu_kb(),
-                                        parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+        await update.message.reply_text(
+            dashboard_html(first, user_id),
+            reply_markup=main_menu_kb(),
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True
+        )
         return
 
+    # settings add-name mode
     if s and s.get("mode") == "await_add_name":
         name = text
         names = get_rep_names(user_id)
@@ -405,10 +472,14 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             names.append(name)
             set_rep_names(user_id, names)
         sessions.pop(chat_id, None)
-        await update.message.reply_text("Saved ✅\n\nSettings • Manage your representative names.", reply_markup=settings_kb(user_id))
+        await update.message.reply_text(
+            "Saved ✅\n\nSettings • Manage your representative names.",
+            reply_markup=settings_kb(user_id)
+        )
         return
 
-    if s and s.get("stage") in ("collect", "edit_select"):
+    # template run
+    if s and s.get("stage") in ("collect", "edit_select", "confirm"):
         labels = s["fields_order"]
 
         awaiting = s.get("awaiting_custom_for")
@@ -427,7 +498,30 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await ask_next(update, context)
             return
 
+    # default
     await start(update, context)
+
+# =========================
+#  HELPERS
+# =========================
+async def start_template_session(chat_id: int, tpl_key: str, update: Update, context: ContextTypes.DEFAULT_TYPE, edit: bool):
+    tpl = templates.get(tpl_key)
+    if not tpl:
+        if update.message:
+            await update.message.reply_text("Template not found.")
+        else:
+            with contextlib.suppress(BadRequest):
+                await update.callback_query.edit_message_text("Template not found.")
+        return
+
+    sessions[chat_id] = {
+        "tpl_key": tpl_key,
+        "fields_order": tpl.get("fields_order", []),
+        "values": {},
+        "idx": 0,
+        "stage": "collect",
+    }
+    await ask_next(update, context, edit=edit)
 
 # =========================
 #  STEPS
@@ -442,6 +536,7 @@ async def ask_next(update: Update, context: ContextTypes.DEFAULT_TYPE, edit: boo
     labels = s["fields_order"]
     while s["idx"] < len(labels):
         label = labels[s["idx"]]
+
         if label.lower() in ("representative", "support specialist"):
             kb = reps_kb(user_id, include_custom=True)
             txt = f"Choose {esc(label)}:"
