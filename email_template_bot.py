@@ -29,7 +29,7 @@ from telegram.request import HTTPXRequest
 # =========================
 # MUST be set as an environment variable in Railway:
 # TELEGRAM_BOT_TOKEN = 123456:AA....
-BOT_TOKEN = os.getenv("8318815644:AAF0IZQDo6tWT6MhOA8WxPmmYoOyZRnDTKE")
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 if not BOT_TOKEN:
     raise SystemExit("ERROR: TELEGRAM_BOT_TOKEN environment variable not set")
 
